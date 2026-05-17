@@ -1,0 +1,97 @@
+import type { SessionDetail } from '@/api/types'
+
+export const sessionDetail: SessionDetail = {
+  id: 'c4',
+  agent: 'a1',
+  type: 'voice',
+  time: 'Today 12:47 PM',
+  duration: '2:21',
+  caller: '+1 (650) ••• 7733',
+  outcome: 'booked',
+  version: 'v3',
+  transcript: [
+    { spk: 'agent', ts: '0:00', text: 'Thanks for calling Reliable Air. This is Avery, your scheduling assistant. How can I help today?' },
+    { spk: 'caller', ts: '0:06', text: "Hi, my AC stopped cooling this morning. I'd like to get someone out as soon as possible." },
+    { spk: 'agent', ts: '0:12', text: 'Sorry to hear that. Can I grab your service address so I can check availability in your area?' },
+    { spk: 'caller', ts: '0:18', text: 'Sure, it\'s 412 Mariposa Street, San Mateo, California.' },
+    { spk: 'agent', ts: '0:27', text: 'Got it — 412 Mariposa Street in San Mateo. Let me check what we have open.' },
+    { spk: 'tool', ts: '0:33', name: 'check_availability', args: '{ "zip": "94401", "service": "ac_repair" }', result: '3 slots returned', ok: true },
+    {
+      spk: 'agent', ts: '0:36',
+      text: 'I have a few openings today. I can fit you in at 3:00 PM, 5:30 PM, or tomorrow morning at 9:00 AM. Which works best?',
+      flagged: true, flag: 'crit',
+      flagText: 'External grader: Failed "Timezone confirmed before booking" — slots stated without confirming caller timezone',
+    },
+    { spk: 'caller', ts: '0:48', text: '3 PM today would be great.' },
+    {
+      spk: 'agent', ts: '0:52',
+      text: 'Perfect — let me lock in 3 PM today for an AC repair at 412 Mariposa Street.',
+      flagged: true, flag: 'crit',
+      flagText: 'External grader: booking confirmed without restating in caller timezone',
+    },
+    { spk: 'tool', ts: '0:58', name: 'book_appointment', args: '{ "address": "412 Mariposa St, San Mateo, CA", "slot": "2026-05-16T15:00:00", "service": "ac_repair" }', result: 'Appointment booked: APT-44218', ok: true },
+    { spk: 'agent', ts: '1:04', text: "You're all set. A confirmation text is on the way. Anything else I can help with?" },
+    { spk: 'caller', ts: '1:11', text: "Actually — wait, is that 3 PM Eastern? I'm in California but my phone's a New York number." },
+    {
+      spk: 'agent', ts: '1:16',
+      text: "Let me pull up your account history to double-check what we have on file for you.",
+      fpFlag: true, fpTool: 'lookup_history',
+      fpText: 'Tool-honesty: agent claimed to use lookup_history but never invoked it. Caller waited 6s for a tool call that never happened.',
+    },
+    { spk: 'caller', ts: '1:24', text: 'Okay…' },
+    {
+      spk: 'agent', ts: '1:28',
+      text: 'I scheduled you for 3:00 PM Pacific time based on your service address. Would you like me to adjust?',
+      augFlag: true, augText: 'Copilot analysis: caller-led correction, not agent-led. Recovery happened but trust was already broken.',
+    },
+    {
+      spk: 'caller', ts: '1:34',
+      text: 'Oh, okay, Pacific is fine. Sorry. Yeah, that works.',
+      augFlag: true, augText: 'Copilot analysis: sustained negative sentiment despite booking — caller apologized for an agent mistake.',
+    },
+    { spk: 'agent', ts: '1:42', text: 'No problem at all. Have a great day!' },
+  ],
+  grading: [
+    { kpi: 'Appointment booked', result: 'pass', sev: 'ok' },
+    {
+      kpi: 'Timezone confirmed before booking', result: 'fail', sev: 'crit',
+      reasoning: "Agent stated time slots and confirmed booking without explicitly asking the caller to confirm their timezone, despite a non-local area code. Caller later questioned the timezone.",
+      anchorTs: '0:36',
+    },
+    { kpi: 'Service address collected', result: 'pass', sev: 'ok' },
+    {
+      kpi: 'Emergency detection', result: 'fail', sev: 'warn',
+      reasoning: 'Caller said "as soon as possible" but agent did not ask whether this was an emergency.',
+      anchorTs: '0:06',
+    },
+    { kpi: 'Stayed under 4 minutes', result: 'pass', sev: 'ok' },
+  ],
+  augmentedFindings: [
+    {
+      type: 'Tool-honesty: false positive',
+      sev: 'crit',
+      reasoning: "Agent claimed \"let me pull up your account history\" at 1:16 but never invoked lookup_history. This is a false positive — the agent told the caller it was doing something it didn't do.",
+      anchorTs: '1:16',
+      clusterId: 'sk2',
+    },
+    {
+      type: 'Customer frustration despite KPI pass',
+      sev: 'warn',
+      reasoning: 'The caller had to correct the agent on timezone, apologized for the agent\'s mistake, and was audibly subdued for the rest of the session. The external grader marked "Appointment booked" as a pass but the customer experience was not.',
+      anchorTs: '1:34',
+      clusterId: 'sk1',
+    },
+    {
+      type: 'Unhandled question',
+      sev: 'info',
+      reasoning: 'Caller asked about timezone — agent answered but did not proactively offer to reschedule until prompted.',
+      anchorTs: '1:11',
+    },
+  ],
+  toolHonesty: [
+    { tool: 'check_availability', tp: 1, fp: 0, tn: 0, fn: 0 },
+    { tool: 'book_appointment',   tp: 1, fp: 0, tn: 0, fn: 0 },
+    { tool: 'lookup_history',     tp: 0, fp: 1, tn: 0, fn: 0 },
+    { tool: 'escalate_emergency', tp: 0, fp: 0, tn: 1, fn: 0 },
+  ],
+}

@@ -1,0 +1,112 @@
+import type { ToolReliability } from '@/api/types'
+
+export const toolReliability: ToolReliability = {
+  agentId: 'a1',
+  version: 'v3',
+  windowDays: 14,
+  honestyScore: 87,
+  honestyPrev: 91,
+  sessionsWithAnyFP: 41,
+  sessionsTotal: 312,
+  tools: [
+    {
+      tool: 'lookup_history',
+      description: 'Pull caller account & past service history',
+      tp: 41, fp: 23, tn: 23, fn: 2,
+      sampleFPSessions: ['c4', 'c1', 'c7', 'c12'],
+      honest: false,
+      promptSuggestion: {
+        severity: 'crit',
+        headline: 'Never claim lookup_history unless you immediately call it',
+        whyMatters: '23 sessions had the agent say "let me pull up your account history" verbally, then never invoke lookup_history. Callers waited 5–8 seconds for a tool call that never happened, then were given generic info — eroding trust.',
+        lift: '−22 pts FP rate · +5 pts honesty score',
+        currentBehavior: [
+          '  // Pulling history',
+          '  When caller is identified, you may pull their account history.',
+          '  Say: "Let me pull up your account."',
+        ],
+        suggestedPrompt: [
+          '  // Honesty around lookup_history',
+          '  Never say "let me pull up your history / account / previous service"',
+          '  unless you are about to call lookup_history in the very next turn.',
+          '  If lookup_history is unavailable or you choose not to call it, say instead:',
+          '  "I don\'t have your service history in front of me — can you tell me a bit about the issue?"',
+        ],
+      },
+    },
+    {
+      tool: 'book_appointment',
+      description: 'Create a service appointment',
+      tp: 263, fp: 12, tn: 30, fn: 7,
+      sampleFPSessions: ['c10'],
+      honest: true,
+      promptSuggestion: {
+        severity: 'warn',
+        headline: 'Announce booking only when you have all required arguments',
+        whyMatters: '12 sessions: agent said "booking that for you now" before knowing the slot or address, then had to back-track and ask follow-ups. Caller perceives the agent as confused.',
+        lift: '−4 pts FP rate',
+        currentBehavior: [
+          '  When caller picks a slot, say "I\'m booking that for you now"',
+          '  and call book_appointment.',
+        ],
+        suggestedPrompt: [
+          '  // Don\'t announce until ready',
+          '  Only say "I\'m booking that for you now" once you have:',
+          '   - confirmed slot',
+          '   - full service address',
+          '   - service type',
+          '  If any are missing, ask for them silently first — no narration about the booking yet.',
+        ],
+      },
+    },
+    {
+      tool: 'check_availability',
+      description: 'Look up open time slots',
+      tp: 282, fp: 6, tn: 18, fn: 3,
+      sampleFPSessions: [],
+      honest: true,
+      promptSuggestion: {
+        severity: 'ok',
+        headline: 'Tight: keep narration and tool call adjacent',
+        whyMatters: 'Tool is healthy. Minor pattern: 6 sessions had the agent say "let me check what we have" followed by a clarifying question, then the tool call — adding ~6 seconds of perceived latency.',
+        lift: '−2 sec perceived latency',
+        currentBehavior: [
+          '  When caller mentions a service, say "let me check" then ask any',
+          '  clarifying questions, then call check_availability.',
+        ],
+        suggestedPrompt: [
+          '  // Keep narration adjacent to the tool call',
+          '  Don\'t say "let me check availability" until the very turn you will call',
+          '  check_availability. Gather all required args silently first.',
+          '  Then narrate and invoke in the same turn.',
+        ],
+      },
+    },
+    {
+      tool: 'escalate_emergency',
+      description: 'Route caller to on-call dispatcher',
+      tp: 14, fp: 0, tn: 294, fn: 4,
+      sampleFPSessions: [],
+      honest: true,
+      promptSuggestion: {
+        severity: 'warn',
+        headline: 'Tell the caller before escalating — 4 silent transfers',
+        whyMatters: '4 sessions had the agent invoke escalate_emergency without warning the caller. Caller heard hold music with no idea what happened, hurting the experience.',
+        lift: '+4 pts on caller-experience score',
+        currentBehavior: ['  If emergency, call escalate_emergency immediately.'],
+        suggestedPrompt: [
+          '  // Always narrate the handoff',
+          '  Before calling escalate_emergency, say:',
+          '  "I\'m going to transfer you to our on-call dispatcher right now — please hold."',
+          '  Then invoke escalate_emergency in the same turn.',
+        ],
+      },
+    },
+  ],
+  explainer: [
+    { code: 'TP', label: 'Agent said it would use this tool, and did. Good.', sev: 'ok' },
+    { code: 'FP', label: "Agent said it would use this tool, but didn't. The agent was dishonest with the caller. Bad.", sev: 'crit' },
+    { code: 'TN', label: "Agent didn't claim to use it, didn't use it. Neutral.", sev: 'info' },
+    { code: 'FN', label: "Agent used it without telling the caller. Usually fine, sometimes confusing.", sev: 'warn' },
+  ],
+}
