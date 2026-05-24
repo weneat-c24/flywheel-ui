@@ -1,1 +1,0 @@
-import{H as e,I as t,M as n,W as r}from"./index-BZtvcFT8.js";var i=[`data-tip`],a=t({__name:`Tooltip`,props:{tip:{}},setup(t){return(a,o)=>(e(),n(`span`,{class:`tt`,"data-tip":t.tip},[r(a.$slots,`default`)],8,i))}});export{a as t};

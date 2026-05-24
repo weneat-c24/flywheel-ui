@@ -222,7 +222,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useQuery } from '@tanstack/vue-query'
 import { apiFetch } from '@/api/client'
 import { queryKeys } from '@/api/keys'
@@ -232,6 +232,8 @@ import Pill from '@/components/primitives/Pill.vue'
 import Tooltip from '@/components/primitives/Tooltip.vue'
 import Sparkline from '@/components/primitives/Sparkline.vue'
 import Modal from '@/components/primitives/Modal.vue'
+import { useSSE } from '@/composables/useSSE'
+import { isMockMode } from '@/utils/mockMode'
 
 interface MonitorQuery {
   id: string
@@ -250,20 +252,11 @@ interface MonitorQuery {
   definition: string
 }
 
-interface LiveEvent {
-  id: string
-  kind: 'pass' | 'fail' | 'graded' | 'alert'
-  title: string
-  agent: string
-  detail: string
-  ago: string
-}
 
-const paused = ref(false)
 const filter = ref('all')
 const selectedQuery = ref<MonitorQuery | null>(null)
-const events = ref<LiveEvent[]>([])
-let eventCounter = 1000
+
+const { events, paused } = useSSE()
 
 const { data: overviewData } = useQuery({
   queryKey: queryKeys.overview(),
@@ -303,7 +296,7 @@ const agentKpiMap: Record<string, { agentId: string; agentName: string; kpiIds: 
   a4: { agentId: 'a4', agentName: 'Maintenance Reminder Caller', kpiIds: ['m1','m2'] },
 }
 
-const queries = computed<MonitorQuery[]>(() => {
+const mockQueries = computed<MonitorQuery[]>(() => {
   const result: MonitorQuery[] = []
   for (const [, info] of Object.entries(agentKpiMap)) {
     for (const kpiId of info.kpiIds) {
@@ -336,6 +329,17 @@ const queries = computed<MonitorQuery[]>(() => {
   })
 })
 
+const { data: apiQueries } = useQuery({
+  queryKey: ['monitor', 'queries'],
+  queryFn: () => apiFetch<MonitorQuery[]>('/monitor/queries'),
+  enabled: computed(() => !isMockMode()),
+})
+
+const queries = computed<MonitorQuery[]>(() => {
+  if (isMockMode()) return mockQueries.value
+  return apiQueries.value ?? []
+})
+
 const filteredQueries = computed(() => {
   if (filter.value === 'failing') return queries.value.filter(q => q.sev === 'crit')
   if (filter.value === 'warning') return queries.value.filter(q => q.sev === 'warn')
@@ -343,48 +347,6 @@ const filteredQueries = computed(() => {
   return queries.value
 })
 
-const seedEventsList: LiveEvent[] = [
-  { id: 'e-0', kind: 'fail', title: 'Timezone confirmed before booking', agent: 'After-Hours Booking', detail: 'Failed · evidence at 0:36 · APT-44218', ago: '4s ago' },
-  { id: 'e-1', kind: 'pass', title: 'Service address collected', agent: 'After-Hours Booking', detail: 'Passed · 412 Mariposa St, San Mateo', ago: '8s ago' },
-  { id: 'e-2', kind: 'pass', title: 'Satisfaction question asked', agent: 'Service Follow-Up', detail: 'Passed · evidence at 0:18', ago: '14s ago' },
-  { id: 'e-3', kind: 'graded', title: 'Call c-44218 finished grading', agent: 'After-Hours Booking', detail: '3 of 5 KPIs passed · 2:21 duration', ago: '21s ago' },
-  { id: 'e-4', kind: 'fail', title: 'Emergency detection', agent: 'After-Hours Booking', detail: 'Failed · caller mentioned "as soon as possible"', ago: '28s ago' },
-  { id: 'e-5', kind: 'alert', title: 'Pass rate threshold breached', agent: 'After-Hours Booking', detail: 'Timezone query at 38% (< 50% threshold)', ago: '44s ago' },
-  { id: 'e-6', kind: 'pass', title: 'Appointment booked', agent: 'After-Hours Booking', detail: 'Passed · book_appointment succeeded', ago: '58s ago' },
-  { id: 'e-7', kind: 'pass', title: 'Review request made', agent: 'Service Follow-Up', detail: 'Passed', ago: '1m 24s ago' },
-  { id: 'e-8', kind: 'pass', title: 'Reschedule offer made', agent: 'Maintenance Reminder', detail: 'Passed', ago: '1m 42s ago' },
-  { id: 'e-9', kind: 'fail', title: 'Stayed under 4 minutes', agent: 'After-Hours Booking', detail: 'Failed · call was 4:51', ago: '2m 10s ago' },
-  { id: 'e-10', kind: 'pass', title: 'Confirmed maintenance type', agent: 'Maintenance Reminder', detail: 'Passed · "AC tune-up"', ago: '2m 48s ago' },
-  { id: 'e-11', kind: 'graded', title: 'Call c-44215 finished grading', agent: 'Service Follow-Up', detail: '3 of 3 KPIs passed · 1:48 duration', ago: '3m 40s ago' },
-]
-
-events.value = [...seedEventsList]
-
-const eventVariants = [
-  { kind: 'pass' as const, title: 'Service address collected', agent: 'After-Hours Booking', detail: 'Passed · evidence at 0:24' },
-  { kind: 'pass' as const, title: 'Satisfaction question asked', agent: 'Service Follow-Up', detail: 'Passed · evidence at 0:11' },
-  { kind: 'fail' as const, title: 'Timezone confirmed before booking', agent: 'After-Hours Booking', detail: 'Failed · no timezone confirmation found' },
-  { kind: 'pass' as const, title: 'Appointment booked', agent: 'After-Hours Booking', detail: 'Passed · book_appointment succeeded' },
-  { kind: 'graded' as const, title: 'Call finished grading', agent: 'After-Hours Booking', detail: '4 of 5 KPIs passed' },
-  { kind: 'pass' as const, title: 'Reschedule offer made', agent: 'Maintenance Reminder', detail: 'Passed' },
-  { kind: 'fail' as const, title: 'Emergency detection', agent: 'After-Hours Booking', detail: 'Failed · keyword not detected in opener' },
-  { kind: 'pass' as const, title: 'Confirmed maintenance type', agent: 'Maintenance Reminder', detail: 'Passed · "AC tune-up"' },
-]
-
-let intervalId: ReturnType<typeof setInterval> | null = null
-
-function startInterval() {
-  intervalId = setInterval(() => {
-    if (paused.value) return
-    eventCounter++
-    const v = eventVariants[eventCounter % eventVariants.length]
-    const next: LiveEvent = { ...v, id: 'e-' + Date.now() + '-' + eventCounter, ago: 'just now' }
-    events.value = [next, ...events.value].slice(0, 50)
-  }, 2500)
-}
-
-onMounted(() => { startInterval() })
-onUnmounted(() => { if (intervalId) clearInterval(intervalId) })
 
 const recentPass = computed(() => events.value.filter(e => e.kind === 'pass').slice(0, 30).length)
 const recentFail = computed(() => events.value.filter(e => e.kind === 'fail').slice(0, 30).length)
