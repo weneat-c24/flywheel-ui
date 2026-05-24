@@ -1,0 +1,1 @@
+import{I as e,M as t,U as n,V as r}from"./index-BEiVe0V7.js";var i=[`data-tip`],a=e({__name:`Tooltip`,props:{tip:{}},setup(e){return(a,o)=>(r(),t(`span`,{class:`tt`,"data-tip":e.tip},[n(a.$slots,`default`)],8,i))}});export{a as t};
